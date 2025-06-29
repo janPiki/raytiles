@@ -1,2 +1,4 @@
-cJSON.*
+# .gitignore
+cJSON.c
+cJSON.h
 
