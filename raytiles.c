@@ -37,6 +37,7 @@ Layer LoadLayer(cJSON *layer) {
   LayerType layerType;
   if (strcmp(typestr, "tilelayer") == 0) {
     layerType = TILE_LAYER;
+
   } else if (strcmp(typestr, "objectgroup")) {
     layerType = OBJECT_GROUP;
   } else if (strcmp(typestr, "imagelayer")) {
@@ -48,9 +49,7 @@ Layer LoadLayer(cJSON *layer) {
   return l;
 }
 
-void UnloadLayer(Layer layer) {
-  // TODO: Finish this function & everything else I guess
-}
+void UnloadLayer(Layer layer) {}
 
 TileMap LoadTileMap(char *filename) {
   cJSON *data = cJSON_Parse(ReadFile(filename));

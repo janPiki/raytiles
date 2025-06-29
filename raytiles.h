@@ -108,4 +108,6 @@ Tile CreateTile(TileSet tileSet, int id, Vector2i position);
 Layer CreateTileLayer(Vector2i size);
 TileSet CreateTileSet(Texture2D image);
 
+int GetTilePropertyInt(Layer layer, Vector2i pos, char *key);
+
 #endif
