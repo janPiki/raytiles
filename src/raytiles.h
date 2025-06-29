@@ -83,6 +83,7 @@ typedef struct {
   Vector2i tileSize;
   TileSet tileSet;
   Layer *layers;
+  int layerCount;
 } TileMap;
 
 // Function declaration
