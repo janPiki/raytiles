@@ -58,7 +58,7 @@ typedef struct {
 } ObjectLayer;
 
 typedef struct {
-  char *filename;
+  Texture2D image;
   Vector2i position;
 } ImageLayer;
 
@@ -71,7 +71,7 @@ typedef struct Layer {
   char *name;
   LayerType type;
   union {
-    TileLayerData data;
+    TileLayerData tileLayer;
     ObjectLayer objLayer;
     ImageLayer imageLayer;
     Group group;
@@ -100,13 +100,6 @@ void DrawTile(Layer layer, Vector2i position); // Draw a single Tile
 // Type convertion
 Vector2i WorldToGrid(Vector2 worldPos); // Convert Vector2 position to grid pos
 Vector2 GridToWorld(Vector2i gridPos);  // Convert grid position to Vector2
-
-// Creation stuff
-TileMap CreateTileMap();
-// Pass 0 as the id to remove the Tile
-Tile CreateTile(TileSet tileSet, int id, Vector2i position);
-Layer CreateTileLayer(Vector2i size);
-TileSet CreateTileSet(Texture2D image);
 
 int GetTilePropertyInt(Layer layer, Vector2i pos, char *key);
 
