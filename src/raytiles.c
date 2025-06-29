@@ -1,5 +1,5 @@
 #include "raytiles.h"
-#include "cJSON.h"
+#include "../cJSON.h"
 #include <raylib.h>
 #include <stdio.h>
 #include <stdlib.h>
