@@ -1,3 +1,3 @@
 # Raytiles
-doesn't work yet
+doesn't work yet.
 keyword: yet
