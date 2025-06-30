@@ -94,9 +94,11 @@ TileSet LoadTileSetFromFile(char *filename, int firstId);
 void UnloadTileSet(TileSet tileSet);
 
 // Drawing and stuff
-void DrawTileMap(TileMap tileMap);  // Draws all the layers of a TileMap
-void DrawLayer(TileMap t, Layer l); // Draw one TileMap Layer
-void DrawTile(TileMap t, Layer layer, Vector2i position); // Draw a single Tile
+void DrawTileMap(TileMap tileMap,
+                 int scale); // Draws all the layers of a TileMap
+void DrawLayer(TileMap t, Layer l, int scale); // Draw one TileMap Layer
+void DrawTile(TileMap t, Layer layer, Vector2i position,
+              int scale); // Draw a single Tile
 
 // Type convertion
 Vector2i WorldToGrid(Vector2 worldPos,

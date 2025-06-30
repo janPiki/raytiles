@@ -346,18 +346,18 @@ Rectangle GetSourceRec(int id, int firstid, Vector2i tileSize,
   return (Rectangle){x, y, tileSize.x, tileSize.y};
 }
 
-void DrawTileMap(TileMap t) {
+void DrawTileMap(TileMap t, int scale) {
   for (int i = 0; i < t.layerCount; i++) {
-    DrawLayer(t, t.layers[i]);
+    DrawLayer(t, t.layers[i], scale);
   }
 }
 
-void DrawLayer(TileMap t, Layer l) {
+void DrawLayer(TileMap t, Layer l, int scale) {
   switch (l.type) {
   case TILE_LAYER:
     for (int x = 0; x < l.LayerData.tileLayer.size.x; x++) {
       for (int y = 0; y < l.LayerData.tileLayer.size.y; y++) {
-        DrawTile(t, l, (Vector2i){x, y});
+        DrawTile(t, l, (Vector2i){x, y}, scale);
       }
     }
     break;
@@ -369,13 +369,13 @@ void DrawLayer(TileMap t, Layer l) {
     break;
   case GROUP:
     for (int i = 0; i < l.LayerData.group.layerCount; i++) {
-      DrawLayer(t, l.LayerData.group.layers[i]);
+      DrawLayer(t, l.LayerData.group.layers[i], scale);
     }
     break;
   }
 }
 
-void DrawTile(TileMap t, Layer l, Vector2i pos) {
+void DrawTile(TileMap t, Layer l, Vector2i pos, int scale) {
   bool outOfBounds = pos.x >= l.LayerData.tileLayer.size.x ||
                      pos.y >= l.LayerData.tileLayer.size.y || pos.x < 0 ||
                      pos.y < 0;
@@ -394,7 +394,10 @@ void DrawTile(TileMap t, Layer l, Vector2i pos) {
   float posWorldX = t.tileSize.x * pos.x;
   float posWorldY = t.tileSize.y * pos.y;
 
-  DrawTextureRec(t.tileSet.image, src, (Vector2){posWorldX, posWorldY}, WHITE);
+  DrawTexturePro(t.tileSet.image, src,
+                 (Rectangle){posWorldX, posWorldY, t.tileSize.x * scale,
+                             t.tileSize.y * scale},
+                 (Vector2){0}, 0, WHITE);
 }
 
 // Drawing functions
