@@ -32,6 +32,7 @@ typedef struct {
 typedef struct {
   Vector2i size;
   int TileCount;
+  int TileCountWithNoProp;
   Texture2D image;
   Tile *tiles;
   int firstId;
@@ -67,7 +68,6 @@ typedef struct {
 } Group;
 
 typedef struct Layer {
-  char *name;
   LayerType type;
   union {
     TileLayerData tileLayer;
@@ -94,8 +94,8 @@ TileSet LoadTileSetFromFile(char *filename, int firstId);
 void UnloadTileSet(TileSet tileSet);
 
 // Drawing and stuff
-void DrawTileMap(TileMap tileMap);    // Draws all the layers of a TileMap
-void DrawLayer(TileMap t, int layer); // Draw one TileMap Layer
+void DrawTileMap(TileMap tileMap);  // Draws all the layers of a TileMap
+void DrawLayer(TileMap t, Layer l); // Draw one TileMap Layer
 void DrawTile(TileMap t, Layer layer, Vector2i position); // Draw a single Tile
 
 // Type convertion
@@ -105,10 +105,9 @@ Vector2 GridToWorld(Vector2i gridPos,
                     Vector2i tileSize); // Convert grid position to Vector2
 
 // Properties & types
-int GetTilePropertyInt(TileMap tileMap, int layer, Vector2i pos, char *key);
-float GetTilePropertyFloat(TileMap tileMap, int layer, Vector2i pos, char *key);
-bool GetTilePropertyBool(TileMap tileMap, int layer, Vector2i pos, char *key);
-char *GetTilePropertyString(TileMap tileMap, int layer, Vector2i pos,
-                            char *key);
+int GetTilePropertyInt(TileMap tileMap, Layer l, Vector2i pos, char *key);
+float GetTilePropertyFloat(TileMap tileMap, Layer l, Vector2i pos, char *key);
+bool GetTilePropertyBool(TileMap tileMap, Layer l, Vector2i pos, char *key);
+char *GetTilePropertyString(TileMap tileMap, Layer l, Vector2i pos, char *key);
 
 #endif

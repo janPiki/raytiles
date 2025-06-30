@@ -1,8 +1,5 @@
 #include "raytiles.h"
 #include "../cJSON.h"
-#include <alloca.h>
-#include <complex.h>
-#include <math.h>
 #include <raylib.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -14,7 +11,7 @@
 char *ReadFile(char *filename) {
   FILE *file = fopen(filename, "rb");
   if (!file) {
-    printf("Failed to open file");
+    printf("Failed to open file: %s\n", filename);
     return NULL;
   }
 
@@ -28,21 +25,26 @@ char *ReadFile(char *filename) {
     return NULL;
   }
 
-  fread(data, 1, lenght, file);
+  if (fread(data, 1, lenght, file) != lenght) {
+    free(data);
+    fclose(file);
+    return NULL;
+  }
   data[lenght] = '\0';
   fclose(file);
 
-  if (!data) {
-    printf("Failed to read file");
-    return "";
-  }
   return data;
 }
 
 Object LoadObject(cJSON *object) {
   Object obj = {0};
   cJSON *type = cJSON_GetObjectItem(object, "type");
-  obj.type = type ? strdup(type->valuestring) : strdup("none");
+
+  char *typestr = type ? type->valuestring : "none";
+  obj.type = strdup(typestr);
+  if (!obj.type) {
+    return (Object){0};
+  }
 
   int x = cJSON_GetObjectItem(object, "x")->valueint;
   int y = cJSON_GetObjectItem(object, "y")->valueint;
@@ -211,7 +213,7 @@ TileMap LoadTileMap(char *filename) {
   if (cJSON_IsString(sourcecJSON)) {
     char *source = sourcecJSON->valuestring;
     t.tileSet = LoadTileSetFromFile(
-        source, cJSON_GetObjectItem(tileset, "firstgit")->valueint);
+        source, cJSON_GetObjectItem(tileset, "firstgid")->valueint);
   } else {
     t.tileSet = LoadTileSet(tileset);
   }
@@ -222,6 +224,8 @@ TileMap LoadTileMap(char *filename) {
 }
 
 void UnloadTileMap(TileMap t) {
+  if (!t.layers)
+    return;
   for (int i = 0; i < t.layerCount; i++) {
     UnloadLayer(t.layers[i]);
   }
@@ -283,8 +287,8 @@ void UnloadTile(Tile t) {
 TileSet LoadTileSet(cJSON *data) {
   TileSet s = {0};
   s.size.x = cJSON_GetObjectItem(data, "columns")->valueint;
-  s.TileCount = cJSON_GetObjectItem(data, "tilecount")->valueint;
-  s.size.y = (s.TileCount + s.size.x - 1) / s.size.x;
+  s.TileCountWithNoProp = cJSON_GetObjectItem(data, "tilecount")->valueint;
+  s.size.y = (s.TileCountWithNoProp + s.size.x - 1) / s.size.x;
 
   s.image = LoadTexture(cJSON_GetObjectItem(data, "image")->valuestring);
 
@@ -344,40 +348,40 @@ Rectangle GetSourceRec(int id, int firstid, Vector2i tileSize,
 
 void DrawTileMap(TileMap t) {
   for (int i = 0; i < t.layerCount; i++) {
-    DrawLayer(t, i);
+    DrawLayer(t, t.layers[i]);
   }
 }
 
-void DrawLayer(TileMap t, int layer) {
-  switch (t.layers[layer].type) {
+void DrawLayer(TileMap t, Layer l) {
+  switch (l.type) {
   case TILE_LAYER:
-    for (int x = 0; x < t.layers[layer].LayerData.tileLayer.size.x; x++) {
-      for (int y = 0; y < t.layers[layer].LayerData.tileLayer.size.y; y++) {
-        DrawTile(t, t.layers[layer], (Vector2i){x, y});
+    for (int x = 0; x < l.LayerData.tileLayer.size.x; x++) {
+      for (int y = 0; y < l.LayerData.tileLayer.size.y; y++) {
+        DrawTile(t, l, (Vector2i){x, y});
       }
     }
     break;
   case OBJECT_GROUP:
     break;
   case IMAGE_LAYER:
-    DrawTexture(t.layers[layer].LayerData.imageLayer.image,
-                t.layers[layer].LayerData.imageLayer.position.x,
-                t.layers[layer].LayerData.imageLayer.position.y, WHITE);
+    DrawTexture(l.LayerData.imageLayer.image, l.LayerData.imageLayer.position.x,
+                l.LayerData.imageLayer.position.y, WHITE);
     break;
   case GROUP:
-    for (int i = 0; i < t.layers[layer].LayerData.group.layerCount; i++) {
-      // I'll do this later;
+    for (int i = 0; i < l.LayerData.group.layerCount; i++) {
+      DrawLayer(t, l.LayerData.group.layers[i]);
     }
     break;
   }
 }
 
 void DrawTile(TileMap t, Layer l, Vector2i pos) {
-  bool posTooBig = pos.x >= l.LayerData.tileLayer.size.x ||
-                   pos.y >= l.LayerData.tileLayer.size.y;
-  if (pos.x < 0 || pos.y < 0 || posTooBig) {
+  bool outOfBounds = pos.x >= l.LayerData.tileLayer.size.x ||
+                     pos.y >= l.LayerData.tileLayer.size.y || pos.x < 0 ||
+                     pos.y < 0;
+
+  if (outOfBounds)
     return;
-  }
 
   int id = l.LayerData.tileLayer.data[pos.y][pos.x];
   if (id == 0) {
@@ -398,8 +402,8 @@ void DrawTile(TileMap t, Layer l, Vector2i pos) {
 // Type convertion
 
 Vector2i WorldToGrid(Vector2 worldPos, Vector2i tileSize) {
-  int flooredX = floor(worldPos.x / tileSize.x);
-  int flooredY = floor(worldPos.y / tileSize.y);
+  int flooredX = (int)worldPos.x / tileSize.x;
+  int flooredY = (int)worldPos.y / tileSize.y;
   return (Vector2i){flooredX, flooredY};
 }
 
@@ -414,17 +418,23 @@ Vector2 GridToWorld(Vector2i gridPos, Vector2i tileSize) {
 // Properties & types
 
 Tile GetTileFromId(int id, TileSet s) {
+  if (id == 0) {
+    return (Tile){0};
+  }
   for (int i = 0; i < s.TileCount; i++) {
-    if (s.tiles[i].id == id) {
+    if (s.tiles[i].id + s.firstId == id) {
       return s.tiles[i];
     }
   }
   return (Tile){0};
 }
 
-int GetTilePropertyInt(TileMap t, int layer, Vector2i pos, char *key) {
-  Tile tile = GetTileFromId(
-      t.layers[layer].LayerData.tileLayer.data[pos.y][pos.x], t.tileSet);
+int GetTilePropertyInt(TileMap t, Layer l, Vector2i pos, char *key) {
+  if (l.LayerData.tileLayer.data[pos.y][pos.x] == 0) {
+    return 0;
+  }
+  Tile tile =
+      GetTileFromId(l.LayerData.tileLayer.data[pos.y][pos.x], t.tileSet);
   for (int i = 0; i < tile.propertiesCount; i++) {
     if (strcmp(tile.properties[i].key, key) == 0) {
       return tile.properties[i].Value.i;
@@ -433,9 +443,12 @@ int GetTilePropertyInt(TileMap t, int layer, Vector2i pos, char *key) {
   return 0;
 }
 
-float GetTilePropertyFloat(TileMap t, int layer, Vector2i pos, char *key) {
-  Tile tile = GetTileFromId(
-      t.layers[layer].LayerData.tileLayer.data[pos.y][pos.x], t.tileSet);
+float GetTilePropertyFloat(TileMap t, Layer l, Vector2i pos, char *key) {
+  if (l.LayerData.tileLayer.data[pos.y][pos.x] == 0) {
+    return 0;
+  }
+  Tile tile =
+      GetTileFromId(l.LayerData.tileLayer.data[pos.y][pos.x], t.tileSet);
   for (int i = 0; i < tile.propertiesCount; i++) {
     if (strcmp(tile.properties[i].key, key) == 0) {
       return tile.properties[i].Value.f;
@@ -444,9 +457,12 @@ float GetTilePropertyFloat(TileMap t, int layer, Vector2i pos, char *key) {
   return 0;
 }
 
-bool GetTilePropertyBool(TileMap t, int layer, Vector2i pos, char *key) {
-  Tile tile = GetTileFromId(
-      t.layers[layer].LayerData.tileLayer.data[pos.y][pos.x], t.tileSet);
+bool GetTilePropertyBool(TileMap t, Layer l, Vector2i pos, char *key) {
+  if (l.LayerData.tileLayer.data[pos.y][pos.x] == 0) {
+    return 0;
+  }
+  Tile tile =
+      GetTileFromId(l.LayerData.tileLayer.data[pos.y][pos.x], t.tileSet);
   for (int i = 0; i < tile.propertiesCount; i++) {
     if (strcmp(tile.properties[i].key, key) == 0) {
       return tile.properties[i].Value.b;
@@ -455,9 +471,12 @@ bool GetTilePropertyBool(TileMap t, int layer, Vector2i pos, char *key) {
   return 0;
 }
 
-char *GetTilePropertyString(TileMap t, int layer, Vector2i pos, char *key) {
-  Tile tile = GetTileFromId(
-      t.layers[layer].LayerData.tileLayer.data[pos.y][pos.x], t.tileSet);
+char *GetTilePropertyString(TileMap t, Layer l, Vector2i pos, char *key) {
+  if (l.LayerData.tileLayer.data[pos.y][pos.x] == 0) {
+    return 0;
+  }
+  Tile tile =
+      GetTileFromId(l.LayerData.tileLayer.data[pos.y][pos.x], t.tileSet);
   for (int i = 0; i < tile.propertiesCount; i++) {
     if (strcmp(tile.properties[i].key, key) == 0) {
       return tile.properties[i].Value.s;
@@ -465,5 +484,4 @@ char *GetTilePropertyString(TileMap t, int layer, Vector2i pos, char *key) {
   }
   return 0;
 }
-
 // Properties & types
