@@ -34,6 +34,7 @@ typedef struct {
   int TileCount;
   Texture2D image;
   Tile *tiles;
+  int firstId;
 } TileSet;
 
 // Layer types and stuff
@@ -79,7 +80,8 @@ typedef struct Layer {
 typedef struct {
   Vector2i size;
   Vector2i tileSize;
-  TileSet *tileSets;
+  Vector2i position;
+  TileSet tileSet;
   Layer *layers;
   int layerCount;
 } TileMap;
@@ -88,13 +90,13 @@ typedef struct {
 // Loading & unloading
 TileMap LoadTileMap(char *filename);
 void UnloadTileMap(TileMap tileMap);
-TileSet LoadTileSetFromFile(char *filename);
+TileSet LoadTileSetFromFile(char *filename, int firstId);
 void UnloadTileSet(TileSet tileSet);
 
 // Drawing and stuff
-void DrawTileMap(TileMap tileMap); // Draws all the layers of a TileMap
-void DrawLayer(Layer layer);       // Draw one TileMap Layer
-void DrawTile(Layer layer, Vector2i position); // Draw a single Tile
+void DrawTileMap(TileMap tileMap);    // Draws all the layers of a TileMap
+void DrawLayer(TileMap t, int layer); // Draw one TileMap Layer
+void DrawTile(TileMap t, Layer layer, Vector2i position); // Draw a single Tile
 
 // Type convertion
 Vector2i WorldToGrid(Vector2 worldPos); // Convert Vector2 position to grid pos

@@ -1,10 +1,14 @@
 #include "raytiles.h"
 #include "../cJSON.h"
+#include <alloca.h>
 #include <complex.h>
 #include <raylib.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// Loading & Unloading functions
 
 char *ReadFile(char *filename) {
   FILE *file = fopen(filename, "rb");
@@ -31,7 +35,8 @@ char *ReadFile(char *filename) {
 
 Object LoadObject(cJSON *object) {
   Object obj = {0};
-  obj.type = strdup(cJSON_GetObjectItem(object, "type")->valuestring);
+  cJSON *type = cJSON_GetObjectItem(object, "type");
+  obj.type = type ? strdup(type->valuestring) : strdup("none");
 
   int x = cJSON_GetObjectItem(object, "x")->valueint;
   int y = cJSON_GetObjectItem(object, "y")->valueint;
@@ -162,6 +167,8 @@ void UnloadLayer(Layer layer) {
   }
 }
 
+TileSet LoadTileSet(cJSON *data);
+
 TileMap LoadTileMap(char *filename) {
   char *filedata = ReadFile(filename);
   cJSON *data = cJSON_Parse(filedata);
@@ -175,14 +182,30 @@ TileMap LoadTileMap(char *filename) {
   t.size.x = cJSON_GetObjectItem(data, "width")->valueint;
   t.size.y = cJSON_GetObjectItem(data, "height")->valueint;
 
+  t.position = (Vector2i){0};
+
   cJSON *layers = cJSON_GetObjectItem(data, "layers");
   int layerNum = cJSON_GetArraySize(layers);
 
   t.layerCount = layerNum;
   t.layers = malloc(sizeof(Layer) * layerNum);
 
+  t.tileSize.x = cJSON_GetObjectItem(data, "tilewidth")->valueint;
+  t.tileSize.y = cJSON_GetObjectItem(data, "tileheight")->valueint;
+
   for (int i = 0; i < layerNum; i++) {
     t.layers[i] = LoadLayer(cJSON_GetArrayItem(layers, i));
+  }
+
+  cJSON *tilesetsArray = cJSON_GetObjectItem(data, "tilesets");
+  cJSON *tileset = cJSON_GetArrayItem(tilesetsArray, 0);
+
+  char *source = cJSON_GetObjectItem(tileset, "source")->valuestring;
+  if (!source) {
+    t.tileSet = LoadTileSet(tileset);
+  } else {
+    t.tileSet = LoadTileSetFromFile(
+        source, cJSON_GetObjectItem(tileset, "firstgid")->valueint);
   }
 
   cJSON_Delete(data);
@@ -194,6 +217,7 @@ void UnloadTileMap(TileMap t) {
   for (int i = 0; i < t.layerCount; i++) {
     UnloadLayer(t.layers[i]);
   }
+  UnloadTileSet(t.tileSet);
   free(t.layers);
 }
 
@@ -205,10 +229,11 @@ Tile LoadTile(cJSON *data) {
   cJSON *propertyArray = cJSON_GetObjectItem(data, "properties");
   if (cJSON_IsArray(propertyArray)) {
     t.propertiesCount = cJSON_GetArraySize(propertyArray);
+    t.properties = malloc(sizeof(TileProperties) * t.propertiesCount);
     for (int i = 0; i < t.propertiesCount; i++) {
       cJSON *thisProperty = cJSON_GetArrayItem(propertyArray, i);
       t.properties[i].key =
-          cJSON_GetObjectItem(thisProperty, "name")->valuestring;
+          strdup(cJSON_GetObjectItem(thisProperty, "name")->valuestring);
 
       char *type = cJSON_GetObjectItem(thisProperty, "type")->valuestring;
       if (strcmp(type, "int") == 0) {
@@ -242,7 +267,9 @@ void UnloadTile(Tile t) {
     if (t.properties[i].type == STRING && t.properties[i].Value.s) {
       free(t.properties[i].Value.s);
     }
+    free(t.properties[i].key);
   }
+  free(t.properties);
 }
 
 TileSet LoadTileSet(cJSON *data) {
@@ -253,8 +280,12 @@ TileSet LoadTileSet(cJSON *data) {
 
   s.image = LoadTexture(cJSON_GetObjectItem(data, "image")->valuestring);
 
+  s.firstId = cJSON_GetObjectItem(data, "firstgid")->valueint;
+
   cJSON *tiles = cJSON_GetObjectItem(data, "tiles");
   if (cJSON_IsArray(tiles)) {
+    s.TileCount = cJSON_GetArraySize(tiles);
+    s.tiles = malloc(sizeof(Tile) * s.TileCount);
     for (int i = 0; i < cJSON_GetArraySize(tiles); i++) {
       s.tiles[i] = LoadTile(cJSON_GetArrayItem(tiles, i));
     }
@@ -263,7 +294,7 @@ TileSet LoadTileSet(cJSON *data) {
   return s;
 }
 
-TileSet LoadTileSetFromFile(char *filename) {
+TileSet LoadTileSetFromFile(char *filename, int firstId) {
   char *filedata = ReadFile(filename);
   cJSON *data = cJSON_Parse(filedata);
   if (!data) {
@@ -272,6 +303,7 @@ TileSet LoadTileSetFromFile(char *filename) {
   }
 
   TileSet s = LoadTileSet(data);
+  s.firstId = firstId;
   cJSON_Delete(data);
   free(filedata);
   return s;
@@ -280,7 +312,77 @@ TileSet LoadTileSetFromFile(char *filename) {
 void UnloadTileSet(TileSet tileSet) {
   UnloadTexture(tileSet.image);
 
-  for (int i = 0; i < tileSet.TileCount; i++) {
-    UnloadTile(tileSet.tiles[i]);
+  if (tileSet.tiles) {
+    for (int i = 0; i < tileSet.TileCount; i++) {
+      UnloadTile(tileSet.tiles[i]);
+    }
+    free(tileSet.tiles);
   }
 }
+// Loading & unloading functions
+
+// Drawing functions
+
+Rectangle GetSourceRec(int id, int firstid, Vector2i tileSize,
+                       int tileSetWidth) {
+  int localId = id - firstid;
+  int columns = tileSetWidth / tileSize.x;
+
+  int x = (localId % columns) * tileSize.x;
+  int y = (localId / columns) * tileSize.y;
+
+  return (Rectangle){x, y, tileSize.x, tileSize.y};
+}
+
+void DrawTileMap(TileMap t) {
+  for (int i = 0; i < t.layerCount; i++) {
+    DrawLayer(t, i);
+  }
+}
+
+void DrawLayer(TileMap t, int layer) {
+  switch (t.layers[layer].type) {
+  case TILE_LAYER:
+    for (int x = 0; x < t.layers[layer].LayerData.tileLayer.size.x; x++) {
+      for (int y = 0; y < t.layers[layer].LayerData.tileLayer.size.y; y++) {
+        DrawTile(t, t.layers[layer], (Vector2i){x, y});
+      }
+    }
+    break;
+  case OBJECT_GROUP:
+    break;
+  case IMAGE_LAYER:
+    DrawTexture(t.layers[layer].LayerData.imageLayer.image,
+                t.layers[layer].LayerData.imageLayer.position.x,
+                t.layers[layer].LayerData.imageLayer.position.y, WHITE);
+    break;
+  case GROUP:
+    for (int i = 0; i < t.layers[layer].LayerData.group.layerCount; i++) {
+      // I'll do this later;
+    }
+    break;
+  }
+}
+
+void DrawTile(TileMap t, Layer l, Vector2i pos) {
+  bool posTooBig = pos.x >= l.LayerData.tileLayer.size.x ||
+                   pos.y >= l.LayerData.tileLayer.size.y;
+  if (pos.x < 0 || pos.y < 0 || posTooBig) {
+    return;
+  }
+
+  int id = l.LayerData.tileLayer.data[pos.y][pos.x];
+  if (id == 0) {
+    return;
+  }
+
+  Rectangle src =
+      GetSourceRec(id, t.tileSet.firstId, t.tileSize, t.tileSet.image.width);
+
+  float posWorldX = t.tileSize.x * pos.x;
+  float posWorldY = t.tileSize.y * pos.y;
+
+  DrawTextureRec(t.tileSet.image, src, (Vector2){posWorldX, posWorldY}, WHITE);
+}
+
+// Drawing functions
