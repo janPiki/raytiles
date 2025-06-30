@@ -99,12 +99,16 @@ void DrawLayer(TileMap t, int layer); // Draw one TileMap Layer
 void DrawTile(TileMap t, Layer layer, Vector2i position); // Draw a single Tile
 
 // Type convertion
-Vector2i WorldToGrid(Vector2 worldPos); // Convert Vector2 position to grid pos
-Vector2 GridToWorld(Vector2i gridPos);  // Convert grid position to Vector2
+Vector2i WorldToGrid(Vector2 worldPos,
+                     Vector2i tileSize); // Convert Vector2 position to grid pos
+Vector2 GridToWorld(Vector2i gridPos,
+                    Vector2i tileSize); // Convert grid position to Vector2
 
-int GetTilePropertyInt(Layer layer, Vector2i pos, char *key);
-float GetTilePropertyFloat(Layer layer, Vector2i pos, char *key);
-bool GetTilePropertyBool(Layer layer, Vector2i pos, char *key);
-char *GetTilePropertyString(Layer layer, Vector2i pos, char *key);
+// Properties & types
+int GetTilePropertyInt(TileMap tileMap, int layer, Vector2i pos, char *key);
+float GetTilePropertyFloat(TileMap tileMap, int layer, Vector2i pos, char *key);
+bool GetTilePropertyBool(TileMap tileMap, int layer, Vector2i pos, char *key);
+char *GetTilePropertyString(TileMap tileMap, int layer, Vector2i pos,
+                            char *key);
 
 #endif

@@ -2,6 +2,7 @@
 #include "../cJSON.h"
 #include <alloca.h>
 #include <complex.h>
+#include <math.h>
 #include <raylib.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -30,6 +31,11 @@ char *ReadFile(char *filename) {
   fread(data, 1, lenght, file);
   data[lenght] = '\0';
   fclose(file);
+
+  if (!data) {
+    printf("Failed to read file");
+    return "";
+  }
   return data;
 }
 
@@ -200,12 +206,14 @@ TileMap LoadTileMap(char *filename) {
   cJSON *tilesetsArray = cJSON_GetObjectItem(data, "tilesets");
   cJSON *tileset = cJSON_GetArrayItem(tilesetsArray, 0);
 
-  char *source = cJSON_GetObjectItem(tileset, "source")->valuestring;
-  if (!source) {
-    t.tileSet = LoadTileSet(tileset);
-  } else {
+  cJSON *sourcecJSON = cJSON_GetObjectItem(tileset, "source");
+
+  if (cJSON_IsString(sourcecJSON)) {
+    char *source = sourcecJSON->valuestring;
     t.tileSet = LoadTileSetFromFile(
-        source, cJSON_GetObjectItem(tileset, "firstgid")->valueint);
+        source, cJSON_GetObjectItem(tileset, "firstgit")->valueint);
+  } else {
+    t.tileSet = LoadTileSet(tileset);
   }
 
   cJSON_Delete(data);
@@ -386,3 +394,76 @@ void DrawTile(TileMap t, Layer l, Vector2i pos) {
 }
 
 // Drawing functions
+
+// Type convertion
+
+Vector2i WorldToGrid(Vector2 worldPos, Vector2i tileSize) {
+  int flooredX = floor(worldPos.x / tileSize.x);
+  int flooredY = floor(worldPos.y / tileSize.y);
+  return (Vector2i){flooredX, flooredY};
+}
+
+Vector2 GridToWorld(Vector2i gridPos, Vector2i tileSize) {
+  float worldX = gridPos.x * tileSize.x;
+  float worldY = gridPos.y * tileSize.y;
+  return (Vector2){worldX, worldY};
+}
+
+// Type convertion
+
+// Properties & types
+
+Tile GetTileFromId(int id, TileSet s) {
+  for (int i = 0; i < s.TileCount; i++) {
+    if (s.tiles[i].id == id) {
+      return s.tiles[i];
+    }
+  }
+  return (Tile){0};
+}
+
+int GetTilePropertyInt(TileMap t, int layer, Vector2i pos, char *key) {
+  Tile tile = GetTileFromId(
+      t.layers[layer].LayerData.tileLayer.data[pos.y][pos.x], t.tileSet);
+  for (int i = 0; i < tile.propertiesCount; i++) {
+    if (strcmp(tile.properties[i].key, key) == 0) {
+      return tile.properties[i].Value.i;
+    }
+  }
+  return 0;
+}
+
+float GetTilePropertyFloat(TileMap t, int layer, Vector2i pos, char *key) {
+  Tile tile = GetTileFromId(
+      t.layers[layer].LayerData.tileLayer.data[pos.y][pos.x], t.tileSet);
+  for (int i = 0; i < tile.propertiesCount; i++) {
+    if (strcmp(tile.properties[i].key, key) == 0) {
+      return tile.properties[i].Value.f;
+    }
+  }
+  return 0;
+}
+
+bool GetTilePropertyBool(TileMap t, int layer, Vector2i pos, char *key) {
+  Tile tile = GetTileFromId(
+      t.layers[layer].LayerData.tileLayer.data[pos.y][pos.x], t.tileSet);
+  for (int i = 0; i < tile.propertiesCount; i++) {
+    if (strcmp(tile.properties[i].key, key) == 0) {
+      return tile.properties[i].Value.b;
+    }
+  }
+  return 0;
+}
+
+char *GetTilePropertyString(TileMap t, int layer, Vector2i pos, char *key) {
+  Tile tile = GetTileFromId(
+      t.layers[layer].LayerData.tileLayer.data[pos.y][pos.x], t.tileSet);
+  for (int i = 0; i < tile.propertiesCount; i++) {
+    if (strcmp(tile.properties[i].key, key) == 0) {
+      return tile.properties[i].Value.s;
+    }
+  }
+  return 0;
+}
+
+// Properties & types
