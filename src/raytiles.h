@@ -45,8 +45,6 @@ typedef struct {
 } TileLayerData;
 
 typedef struct {
-  int id;
-  char *name;
   char *type; // Defined by user
   Vector2i position;
   Vector2i size;
@@ -81,7 +79,7 @@ typedef struct Layer {
 typedef struct {
   Vector2i size;
   Vector2i tileSize;
-  TileSet tileSet;
+  TileSet *tileSets;
   Layer *layers;
   int layerCount;
 } TileMap;
@@ -90,7 +88,7 @@ typedef struct {
 // Loading & unloading
 TileMap LoadTileMap(char *filename);
 void UnloadTileMap(TileMap tileMap);
-TileSet LoadTileSet(char *filename);
+TileSet LoadTileSetFromFile(char *filename);
 void UnloadTileSet(TileSet tileSet);
 
 // Drawing and stuff
@@ -103,5 +101,8 @@ Vector2i WorldToGrid(Vector2 worldPos); // Convert Vector2 position to grid pos
 Vector2 GridToWorld(Vector2i gridPos);  // Convert grid position to Vector2
 
 int GetTilePropertyInt(Layer layer, Vector2i pos, char *key);
+float GetTilePropertyFloat(Layer layer, Vector2i pos, char *key);
+bool GetTilePropertyBool(Layer layer, Vector2i pos, char *key);
+char *GetTilePropertyString(Layer layer, Vector2i pos, char *key);
 
 #endif

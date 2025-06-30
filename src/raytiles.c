@@ -66,10 +66,18 @@ Layer LoadTileLayer(cJSON *layer, Layer l) {
   return l;
 }
 
+void UnloadObject(Object obj) {
+  if (obj.type) {
+    free(obj.type);
+  }
+}
+
 Layer LoadObjectLayer(cJSON *layer, Layer l) {
   cJSON *objectsArray = cJSON_GetObjectItem(layer, "objects");
   int objectsArraylength = cJSON_GetArraySize(objectsArray);
   l.LayerData.objLayer.objectCount = objectsArraylength;
+
+  l.LayerData.objLayer.objects = malloc(sizeof(Object) * objectsArraylength);
 
   for (int i = 0; i < objectsArraylength; i++) {
     l.LayerData.objLayer.objects[i] =
@@ -97,6 +105,8 @@ Layer LoadLayerGroup(cJSON *layer, Layer l) {
 
   int layerCount = cJSON_GetArraySize(layerInGroup);
   l.LayerData.group.layerCount = layerCount;
+
+  l.LayerData.group.layers = malloc(sizeof(Layer) * layerCount);
 
   for (int i = 0; i < layerCount; i++) {
     l.LayerData.group.layers[i] =
@@ -139,14 +149,16 @@ void UnloadLayer(Layer layer) {
     free(layer.LayerData.tileLayer.data);
   } else if (layer.type == OBJECT_GROUP) {
     for (int i = 0; i < layer.LayerData.objLayer.objectCount; i++) {
-      free(layer.LayerData.objLayer.objects[i].type);
+      UnloadObject(layer.LayerData.objLayer.objects[i]);
     }
+    free(layer.LayerData.objLayer.objects);
   } else if (layer.type == IMAGE_LAYER) {
     UnloadTexture(layer.LayerData.imageLayer.image);
   } else if (layer.type == GROUP) {
     for (int i = 0; i < layer.LayerData.group.layerCount; i++) {
       UnloadLayer(layer.LayerData.group.layers[i]);
     }
+    free(layer.LayerData.group.layers);
   }
 }
 
@@ -183,4 +195,92 @@ void UnloadTileMap(TileMap t) {
     UnloadLayer(t.layers[i]);
   }
   free(t.layers);
+}
+
+Tile LoadTile(cJSON *data) {
+  Tile t = {0};
+
+  t.id = cJSON_GetObjectItem(data, "id")->valueint;
+
+  cJSON *propertyArray = cJSON_GetObjectItem(data, "properties");
+  if (cJSON_IsArray(propertyArray)) {
+    t.propertiesCount = cJSON_GetArraySize(propertyArray);
+    for (int i = 0; i < t.propertiesCount; i++) {
+      cJSON *thisProperty = cJSON_GetArrayItem(propertyArray, i);
+      t.properties[i].key =
+          cJSON_GetObjectItem(thisProperty, "name")->valuestring;
+
+      char *type = cJSON_GetObjectItem(thisProperty, "type")->valuestring;
+      if (strcmp(type, "int") == 0) {
+        t.properties[i].type = INT;
+        t.properties[i].Value.i =
+            cJSON_GetObjectItem(thisProperty, "value")->valueint;
+
+      } else if (strcmp(type, "float") == 0) {
+        t.properties[i].type = FLOAT;
+        t.properties[i].Value.f =
+            cJSON_GetObjectItem(thisProperty, "value")->valuedouble;
+
+      } else if (strcmp(type, "bool") == 0) {
+        t.properties[i].type = BOOL;
+        t.properties[i].Value.b =
+            cJSON_IsTrue(cJSON_GetObjectItem(thisProperty, "value"));
+
+      } else if (strcmp(type, "string") == 0) {
+        t.properties[i].type = STRING;
+        t.properties[i].Value.s =
+            strdup(cJSON_GetObjectItem(thisProperty, "value")->valuestring);
+      }
+    }
+  }
+
+  return t;
+}
+
+void UnloadTile(Tile t) {
+  for (int i = 0; i < t.propertiesCount; i++) {
+    if (t.properties[i].type == STRING && t.properties[i].Value.s) {
+      free(t.properties[i].Value.s);
+    }
+  }
+}
+
+TileSet LoadTileSet(cJSON *data) {
+  TileSet s = {0};
+  s.size.x = cJSON_GetObjectItem(data, "columns")->valueint;
+  s.TileCount = cJSON_GetObjectItem(data, "tilecount")->valueint;
+  s.size.y = (s.TileCount + s.size.x - 1) / s.size.x;
+
+  s.image = LoadTexture(cJSON_GetObjectItem(data, "image")->valuestring);
+
+  cJSON *tiles = cJSON_GetObjectItem(data, "tiles");
+  if (cJSON_IsArray(tiles)) {
+    for (int i = 0; i < cJSON_GetArraySize(tiles); i++) {
+      s.tiles[i] = LoadTile(cJSON_GetArrayItem(tiles, i));
+    }
+  }
+
+  return s;
+}
+
+TileSet LoadTileSetFromFile(char *filename) {
+  char *filedata = ReadFile(filename);
+  cJSON *data = cJSON_Parse(filedata);
+  if (!data) {
+    printf("Failed to parse file");
+    return (TileSet){0};
+  }
+
+  TileSet s = LoadTileSet(data);
+  cJSON_Delete(data);
+  free(filedata);
+  return s;
+}
+
+void UnloadTileSet(TileSet tileSet) {
+  UnloadTexture(tileSet.image);
+
+  for (int i = 0; i < tileSet.TileCount; i++) {
+    UnloadTile(tileSet.tiles[i]);
+  }
 }
