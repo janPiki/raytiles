@@ -1,7 +1,8 @@
 #include "raytiles.h"
-#include "../cJSON.h"
+#include "cJSON.h"
 #include <raylib.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -175,7 +176,20 @@ void UnloadLayer(Layer layer) {
   }
 }
 
-TileSet LoadTileSet(cJSON *data);
+char *GetDirectory(char *filepath) {
+  char *lastSlash = strrchr(filepath, '/');
+  if (!lastSlash)
+    return strdup("./");
+
+  size_t len = lastSlash - filepath + 1;
+  char *dir = malloc(len + 1);
+  strncpy(dir, filepath, len);
+  dir[len] = '\0';
+  return dir;
+}
+
+TileSet LoadTileSet(cJSON *data, char *basePath);
+char *ResolveRalativePath(char *base, char *relative);
 
 TileMap LoadTileMap(char *filename) {
   char *filedata = ReadFile(filename);
@@ -183,6 +197,7 @@ TileMap LoadTileMap(char *filename) {
 
   if (!data) {
     printf("Failed to parse file");
+    free(filedata);
     return (TileMap){0};
   }
 
@@ -206,16 +221,37 @@ TileMap LoadTileMap(char *filename) {
   }
 
   cJSON *tilesetsArray = cJSON_GetObjectItem(data, "tilesets");
-  cJSON *tileset = cJSON_GetArrayItem(tilesetsArray, 0);
+  cJSON *tilesetStub = cJSON_GetArrayItem(tilesetsArray, 0);
 
-  cJSON *sourcecJSON = cJSON_GetObjectItem(tileset, "source");
+  cJSON *sourceItem = cJSON_GetObjectItem(tilesetStub, "source");
 
-  if (cJSON_IsString(sourcecJSON)) {
-    char *source = sourcecJSON->valuestring;
-    t.tileSet = LoadTileSetFromFile(
-        source, cJSON_GetObjectItem(tileset, "firstgid")->valueint);
+  if (!cJSON_IsString(sourceItem)) {
+    char *source = sourceItem->valuestring;
+    char *resolvedPath = ResolveRalativePath(filename, source);
+    char *tileSetFileData = ReadFile(resolvedPath);
+    free(resolvedPath);
+
+    if (!tileSetFileData) {
+      printf("Error: Failed to read tileset: %s", source);
+      return (TileMap){0};
+    }
+
+    cJSON *tilesetData = cJSON_Parse(tileSetFileData);
+    free(tileSetFileData);
+
+    if (!tilesetData) {
+      printf("Error: Failed to parse file: %s\n", source);
+      return (TileMap){0};
+    }
+
+    char *tilesetPath = GetDirectory(resolvedPath);
+    t.tileSet = LoadTileSet(tilesetData, tilesetPath);
+    free(tilesetPath);
+    cJSON_Delete(tilesetData);
   } else {
-    t.tileSet = LoadTileSet(tileset);
+    char *tilemapDir = GetDirectory(filename);
+    t.tileSet = LoadTileSet(tilesetStub, tilemapDir);
+    free(tilemapDir);
   }
 
   cJSON_Delete(data);
@@ -284,15 +320,63 @@ void UnloadTile(Tile t) {
   free(t.properties);
 }
 
-TileSet LoadTileSet(cJSON *data) {
+char *ResolveRalativePath(char *basePath, char *relativePath) {
+  char *lastSlash = strrchr(basePath, '/');
+  if (!lastSlash)
+    return strdup(relativePath);
+  size_t baseLen = lastSlash - basePath + 1;
+
+  char *fullPath = malloc(baseLen + strlen(relativePath) + 1);
+  strncpy(fullPath, basePath, baseLen);
+  strcpy(fullPath + baseLen, relativePath);
+  return fullPath;
+}
+
+TileSet LoadTileSet(cJSON *data, char *dir) {
+  cJSON *sourceItem = cJSON_GetObjectItem(data, "source");
+  if (cJSON_IsString(sourceItem)) {
+    char *source = sourceItem->valuestring;
+
+    if (!dir) {
+      printf("Error: Tilemap Filepath not set");
+      return (TileSet){0};
+    }
+    char *sourcePath = sourceItem->valuestring;
+    char *resolvedPath = ResolveRalativePath(dir, sourcePath);
+
+    char *tileSetFiledata = ReadFile(resolvedPath);
+
+    if (!tileSetFiledata) {
+      printf("Error: Failed to read tileset: %s\n", sourcePath);
+      return (TileSet){0};
+    }
+
+    cJSON *tileSetData = cJSON_Parse(tileSetFiledata);
+    free(tileSetFiledata);
+
+    if (!tileSetData) {
+      printf("Error: Failed to parse tileset");
+      return (TileSet){0};
+    }
+
+    char *tilesetDir = GetDirectory(resolvedPath);
+    free(resolvedPath);
+
+    TileSet ts = LoadTileSet(tileSetData, tilesetDir);
+    free(tilesetDir);
+    cJSON_Delete(tileSetData);
+    return ts;
+  }
+
   TileSet s = {0};
   s.size.x = cJSON_GetObjectItem(data, "columns")->valueint;
   s.TileCountWithNoProp = cJSON_GetObjectItem(data, "tilecount")->valueint;
   s.size.y = (s.TileCountWithNoProp + s.size.x - 1) / s.size.x;
 
-  s.image = LoadTexture(cJSON_GetObjectItem(data, "image")->valuestring);
-
-  s.firstId = cJSON_GetObjectItem(data, "firstgid")->valueint;
+  char *imageRelativePath = cJSON_GetObjectItem(data, "image")->valuestring;
+  char *imageFullPath = ResolveRalativePath(dir, imageRelativePath);
+  s.image = LoadTexture(imageFullPath);
+  free(imageFullPath);
 
   cJSON *tiles = cJSON_GetObjectItem(data, "tiles");
   if (cJSON_IsArray(tiles)) {
@@ -306,7 +390,7 @@ TileSet LoadTileSet(cJSON *data) {
   return s;
 }
 
-TileSet LoadTileSetFromFile(char *filename, int firstId) {
+TileSet LoadTileSetFromFile(char *filename) {
   char *filedata = ReadFile(filename);
   cJSON *data = cJSON_Parse(filedata);
   if (!data) {
@@ -314,8 +398,8 @@ TileSet LoadTileSetFromFile(char *filename, int firstId) {
     return (TileSet){0};
   }
 
-  TileSet s = LoadTileSet(data);
-  s.firstId = firstId;
+  char *dir = GetDirectory(filename);
+  TileSet s = LoadTileSet(data, dir);
   cJSON_Delete(data);
   free(filedata);
   return s;
@@ -335,13 +419,11 @@ void UnloadTileSet(TileSet tileSet) {
 
 // Drawing functions
 
-Rectangle GetSourceRec(int id, int firstid, Vector2i tileSize,
-                       int tileSetWidth) {
-  int localId = id - firstid;
-  int columns = tileSetWidth / tileSize.x;
+Rectangle GetSourceRec(int id, Vector2i tileSize, int imageWidth, TileSet s) {
+  int columns = imageWidth / tileSize.x;
 
-  int x = (localId % columns) * tileSize.x;
-  int y = (localId / columns) * tileSize.y;
+  int x = (id % columns) * tileSize.x;
+  int y = (id / columns) * tileSize.y;
 
   return (Rectangle){x, y, tileSize.x, tileSize.y};
 }
@@ -389,10 +471,10 @@ void DrawTile(TileMap t, Layer l, Vector2i pos, int scale) {
   }
 
   Rectangle src =
-      GetSourceRec(id, t.tileSet.firstId, t.tileSize, t.tileSet.image.width);
+      GetSourceRec(id - 1, t.tileSize, t.tileSet.image.width, t.tileSet);
 
-  float posWorldX = t.tileSize.x * pos.x;
-  float posWorldY = t.tileSize.y * pos.y;
+  float posWorldX = t.tileSize.x * scale * pos.x;
+  float posWorldY = t.tileSize.y * scale * pos.y;
 
   DrawTexturePro(t.tileSet.image, src,
                  (Rectangle){posWorldX, posWorldY, t.tileSize.x * scale,
@@ -424,8 +506,11 @@ Tile GetTileFromId(int id, TileSet s) {
   if (id == 0) {
     return (Tile){0};
   }
+
+  id -= 1;
+
   for (int i = 0; i < s.TileCount; i++) {
-    if (s.tiles[i].id + s.firstId == id) {
+    if (s.tiles[i].id == id) {
       return s.tiles[i];
     }
   }

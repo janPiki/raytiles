@@ -35,7 +35,6 @@ typedef struct {
   int TileCountWithNoProp;
   Texture2D image;
   Tile *tiles;
-  int firstId;
 } TileSet;
 
 // Layer types and stuff
@@ -90,7 +89,7 @@ typedef struct {
 // Loading & unloading
 TileMap LoadTileMap(char *filename);
 void UnloadTileMap(TileMap tileMap);
-TileSet LoadTileSetFromFile(char *filename, int firstId);
+TileSet LoadTileSetFromFile(char *filename);
 void UnloadTileSet(TileSet tileSet);
 
 // Drawing and stuff
