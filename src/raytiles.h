@@ -111,4 +111,6 @@ float GetTilePropertyFloat(TileMap tileMap, Layer l, Vector2i pos, char *key);
 bool GetTilePropertyBool(TileMap tileMap, Layer l, Vector2i pos, char *key);
 char *GetTilePropertyString(TileMap tileMap, Layer l, Vector2i pos, char *key);
 
+// Modifying/Creating
+void SetTile(TileMap *t, Vector2i pos, int id);
 #endif
